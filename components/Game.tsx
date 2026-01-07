@@ -11,13 +11,13 @@ interface GameProps {
 
 export const Game: React.FC<GameProps> = ({ onGameOver, gameState }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   // Game Logic State
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [shotsTaken, setShotsTaken] = useState(0);
   const [netScale, setNetScale] = useState(1);
-  
+
   // Physics Refs (Mutable for performance, preventing react re-renders on every frame)
   const physics = useRef<PhysicsState>({
     pos: { x: window.innerWidth / 2, y: window.innerHeight - FLOOR_Y_OFFSET },
@@ -36,11 +36,11 @@ export const Game: React.FC<GameProps> = ({ onGameOver, gameState }) => {
   // Initialize Position
   useEffect(() => {
     const handleResize = () => {
-        if (!physics.current.isAirborne && !physics.current.isDragging) {
-            physics.current.pos = { x: window.innerWidth / 2, y: window.innerHeight - FLOOR_Y_OFFSET };
-            setRenderTrigger(prev => prev + 1);
-        }
-        setHoopX(window.innerWidth / 2);
+      if (!physics.current.isAirborne && !physics.current.isDragging) {
+        physics.current.pos = { x: window.innerWidth / 2, y: window.innerHeight - FLOOR_Y_OFFSET };
+        setRenderTrigger(prev => prev + 1);
+      }
+      setHoopX(window.innerWidth / 2);
     };
     window.addEventListener('resize', handleResize);
     handleResize();
@@ -50,7 +50,7 @@ export const Game: React.FC<GameProps> = ({ onGameOver, gameState }) => {
   // Timer
   useEffect(() => {
     if (gameState !== GameState.PLAYING) return;
-    
+
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -81,7 +81,7 @@ export const Game: React.FC<GameProps> = ({ onGameOver, gameState }) => {
     if (gameState !== GameState.PLAYING) return;
 
     const p = physics.current;
-    
+
     if (p.isAirborne) {
       // Apply Physics
       p.vel.y += GRAVITY;
@@ -94,10 +94,10 @@ export const Game: React.FC<GameProps> = ({ onGameOver, gameState }) => {
       if (p.pos.y > floorY) {
         p.pos.y = floorY;
         p.vel.y *= -BOUNCE_DAMPING;
-        
+
         // Stop if slow enough
         if (Math.abs(p.vel.y) < 2) {
-             resetBall();
+          resetBall();
         }
       }
 
@@ -115,20 +115,20 @@ export const Game: React.FC<GameProps> = ({ onGameOver, gameState }) => {
       const rimLeftX = hoopX - HOOP_RADIUS;
       const rimRightX = hoopX + HOOP_RADIUS;
       const rimY = HOOP_Y;
-      
+
       // Simple distance check to rim edges for "bounce"
       const distLeft = Math.sqrt(Math.pow(p.pos.x - rimLeftX, 2) + Math.pow(p.pos.y - rimY, 2));
       const distRight = Math.sqrt(Math.pow(p.pos.x - rimRightX, 2) + Math.pow(p.pos.y - rimY, 2));
-      
+
       const rimCollisionRadius = 5; // Tolerance
-      
+
       // Bounce logic
       if (distLeft < BALL_RADIUS + rimCollisionRadius) {
-           p.vel.x = Math.abs(p.vel.x) * 0.8; // Bounce right
-           p.vel.y *= -0.8;
+        p.vel.x = Math.abs(p.vel.x) * 0.8; // Bounce right
+        p.vel.y *= -0.8;
       } else if (distRight < BALL_RADIUS + rimCollisionRadius) {
-           p.vel.x = -Math.abs(p.vel.x) * 0.8; // Bounce left
-           p.vel.y *= -0.8;
+        p.vel.x = -Math.abs(p.vel.x) * 0.8; // Bounce left
+        p.vel.y *= -0.8;
       }
 
       // Scoring Logic
@@ -162,15 +162,11 @@ export const Game: React.FC<GameProps> = ({ onGameOver, gameState }) => {
   // Input Handlers
   const handleStart = (clientX: number, clientY: number) => {
     if (gameState !== GameState.PLAYING || physics.current.isAirborne) return;
-    
-    // Check if clicking near ball
-    const dx = clientX - physics.current.pos.x;
-    const dy = clientY - physics.current.pos.y;
-    if (Math.sqrt(dx*dx + dy*dy) < BALL_RADIUS * 3) {
-      physics.current.isDragging = true;
-      physics.current.dragStart = { x: clientX, y: clientY };
-      physics.current.dragCurrent = { x: clientX, y: clientY };
-    }
+
+    // Allow starting drag anywhere if not airborne, for easier mobile play
+    physics.current.isDragging = true;
+    physics.current.dragStart = { x: clientX, y: clientY };
+    physics.current.dragCurrent = { x: clientX, y: clientY };
   };
 
   const handleMove = (clientX: number, clientY: number) => {
@@ -181,35 +177,46 @@ export const Game: React.FC<GameProps> = ({ onGameOver, gameState }) => {
 
   const handleEnd = () => {
     if (!physics.current.isDragging) return;
-    
+
     const start = physics.current.dragStart!;
     const current = physics.current.dragCurrent!;
-    
-    // Calculate vector
-    let dx = start.x - current.x;
-    let dy = start.y - current.y;
+
+    // Calculate vector (Swipe direction)
+    let dx = current.x - start.x;
+    let dy = current.y - start.y;
+
+    // Only allow throwing upwards
+    if (dy > 0) {
+      physics.current.isDragging = false;
+      physics.current.dragStart = null;
+      physics.current.dragCurrent = null;
+      setRenderTrigger(prev => prev + 1);
+      return;
+    }
 
     // Cap power
-    const dist = Math.sqrt(dx*dx + dy*dy);
+    const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist > MAX_DRAG_DISTANCE) {
-        const scale = MAX_DRAG_DISTANCE / dist;
-        dx *= scale;
-        dy *= scale;
+      const scale = MAX_DRAG_DISTANCE / dist;
+      dx *= scale;
+      dy *= scale;
     }
 
-    if (dist > 20) { // Minimum pull
-        physics.current.isDragging = false;
-        physics.current.isAirborne = true;
-        physics.current.vel = {
-            x: dx * DRAG_POWER_SCALE,
-            y: dy * DRAG_POWER_SCALE
-        };
-        setShotsTaken(s => s + 1);
+    if (dist > 20) { // Minimum swipe distance
+      physics.current.isDragging = false;
+      physics.current.isAirborne = true;
+      // Adjust power scale for swipe feel - increased slightly
+      const SWIPE_POWER_SCALE = DRAG_POWER_SCALE * 1.5;
+      physics.current.vel = {
+        x: dx * SWIPE_POWER_SCALE,
+        y: dy * SWIPE_POWER_SCALE
+      };
+      setShotsTaken(s => s + 1);
     } else {
-        // Cancel shot
-        physics.current.isDragging = false;
+      // Cancel shot
+      physics.current.isDragging = false;
     }
-    
+
     physics.current.dragStart = null;
     physics.current.dragCurrent = null;
     setRenderTrigger(prev => prev + 1);
@@ -217,32 +224,16 @@ export const Game: React.FC<GameProps> = ({ onGameOver, gameState }) => {
 
   // Trajectory Line Calculation
   const getTrajectoryPath = () => {
-      if (!physics.current.isDragging || !physics.current.dragStart || !physics.current.dragCurrent) return "";
-      
-      const start = physics.current.dragStart;
-      const current = physics.current.dragCurrent;
-      let vx = (start.x - current.x) * DRAG_POWER_SCALE;
-      let vy = (start.y - current.y) * DRAG_POWER_SCALE;
-      
-      let x = physics.current.pos.x;
-      let y = physics.current.pos.y;
-      
-      let path = `M ${x} ${y}`;
-      
-      // Simulate a few frames
-      for(let i=0; i<25; i++) {
-          x += vx;
-          y += vy;
-          vy += GRAVITY;
-          path += ` L ${x} ${y}`;
-      }
-      return path;
+    // Re-added for visual flair, even if simple line is used
+    if (!physics.current.isDragging || !physics.current.dragStart || !physics.current.dragCurrent) return "";
+    /* ... kept simple if needed, or unused if we stick to the line below */
+    return "";
   };
 
   return (
-    <div 
+    <div
       ref={containerRef}
-      className="relative w-full h-full bg-slate-800 touch-none overflow-hidden"
+      className="relative w-full h-full bg-transparent touch-none overflow-hidden"
       onMouseDown={(e) => handleStart(e.clientX, e.clientY)}
       onMouseMove={(e) => handleMove(e.clientX, e.clientY)}
       onMouseUp={handleEnd}
@@ -250,55 +241,68 @@ export const Game: React.FC<GameProps> = ({ onGameOver, gameState }) => {
       onTouchMove={(e) => handleMove(e.touches[0].clientX, e.touches[0].clientY)}
       onTouchEnd={handleEnd}
     >
-      {/* UI Layer */}
-      <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-start z-40 pointer-events-none">
-        <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-700 backdrop-blur-sm">
-            <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Punkte</p>
-            <p className="text-3xl font-black text-orange-500">{score}</p>
+      {/* HUD Layer */}
+      <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-start z-40 pointer-events-none font-[family-name:var(--font-display)]">
+        <div className="flex flex-col items-center">
+          <div className="text-white/60 text-lg tracking-widest uppercase">Punkte</div>
+          <div className="text-6xl font-bold text-orange-500 drop-shadow-[0_2px_10px_rgba(249,115,22,0.5)]">{score}</div>
         </div>
-        <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-700 backdrop-blur-sm">
-            <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Zeit</p>
-            <p className={`text-3xl font-black ${timeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
-                {timeLeft}s
-            </p>
+        <div className="flex flex-col items-center">
+          <div className="text-white/60 text-lg tracking-widest uppercase">Zeit</div>
+          <div className={`text-6xl font-bold drop-shadow-md ${timeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+            {timeLeft}
+          </div>
         </div>
       </div>
 
-      {/* Trajectory */}
-      {physics.current.isDragging && (
-          <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-10">
-              <path 
-                d={getTrajectoryPath()} 
-                stroke="rgba(255,255,255,0.3)" 
-                strokeWidth="4" 
-                fill="none" 
-                strokeDasharray="8 8" 
-              />
-              <line 
-                x1={physics.current.pos.x} 
-                y1={physics.current.pos.y} 
-                x2={physics.current.dragCurrent?.x} 
-                y2={physics.current.dragCurrent?.y} 
-                stroke="rgba(255, 165, 0, 0.6)" 
-                strokeWidth="2"
-              />
-          </svg>
+      {/* Swipe Indicator */}
+      {physics.current.isDragging && physics.current.dragStart && physics.current.dragCurrent && (
+        <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-10">
+          <defs>
+            <linearGradient id="swipeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="rgba(255,255,255,0)" />
+              <stop offset="100%" stopColor="rgba(255,255,255,0.6)" />
+            </linearGradient>
+          </defs>
+          <line
+            x1={physics.current.dragStart.x}
+            y1={physics.current.dragStart.y}
+            x2={physics.current.dragCurrent.x}
+            y2={physics.current.dragCurrent.y}
+            stroke="url(#swipeGradient)"
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray="10 10"
+            className="animate-pulse"
+          />
+        </svg>
       )}
 
       {/* Layering: Backboard -> Ball -> Front Rim/Net */}
       <HoopBack x={hoopX} />
-      
-      <Ball 
-        x={physics.current.pos.x} 
-        y={physics.current.pos.y} 
+
+      <Ball
+        x={physics.current.pos.x}
+        y={physics.current.pos.y}
         rotation={physics.current.pos.x * 2}
         isDragging={physics.current.isDragging}
       />
-      
+
       <HoopFront x={hoopX} netScale={netScale} />
 
       {/* Floor Visual */}
-      <div className="absolute bottom-0 w-full h-24 bg-gradient-to-t from-black/50 to-transparent pointer-events-none z-10"></div>
+      <div className="absolute bottom-0 w-full h-32 z-0 pointer-events-none">
+        {/* Concrete Texture */}
+        <div className="absolute inset-0 bg-[#2d3436] opacity-90"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23000000' fill-opacity='0.2' fill-rule='evenodd'%3E%3Ccircle cx='3' cy='3' r='1'/%3E%3Ccircle cx='13' cy='13' r='1'/%3E%3C/g%3E%3C/svg%3E")`
+          }}>
+        </div>
+        {/* Reflection Fade */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+        {/* Environment Glow */}
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-20 bg-orange-500/10 blur-[50px]"></div>
+      </div>
     </div>
   );
 }
