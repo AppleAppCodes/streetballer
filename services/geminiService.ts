@@ -1,15 +1,22 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Access API key safely using Vite's env variable standard
+const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
 
 export const getCoachComment = async (score: number, shotsTaken: number): Promise<string> => {
-  if (!process.env.API_KEY) return "Gut gespielt! (API Key fehlt)";
+  if (!apiKey) {
+    console.warn("Google API Key is missing. Returning fallback comment.");
+    return "Gut gespielt! (API Key nicht konfiguriert)";
+  }
 
   try {
+    // Initialize lazily to prevent crashes if key is invalid/missing at startup
+    const ai = new GoogleGenAI({ apiKey });
+
     const accuracy = shotsTaken > 0 ? Math.round((score / shotsTaken) * 100) : 0;
-    
+
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-1.5-flash',
       contents: `
         Du bist ein charismatischer, lustiger Basketball-Coach.
         Ein Spieler hat gerade eine 30-Sekunden-Runde beendet.
